@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="FIT4110 Lab05 IoT Compose" tests="4" time="0.054">
-  <testsuite name="Health" id="6daff0de-d036-4aac-a797-550a82280398" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.037">
-    <testcase name="health returns 200" time="0.037" classname="Health"/>
-    <testcase name="health payload is valid" time="0.037" classname="Health"/>
+<testsuites name="FIT4110 Lab05 AI Vision Compose" tests="4" time="0.056">
+  <testsuite name="Health" id="ab61f565-30d4-455d-930c-869565677f5b" timestamp="2026-06-09T09:29:08.792Z" tests="2" failures="0" errors="0" time="0.034">
+    <testcase name="health returns 200" time="0.034" classname="Health"/>
+    <testcase name="health payload matches AI Vision contract" time="0.034" classname="Health"/>
   </testsuite>
-  <testsuite name="Create Reading" id="0042bde3-7a7f-4c6c-aa04-15fb7e0656ea" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.008">
-    <testcase name="create reading returns 201" time="0.008" classname="CreateReading"/>
-    <testcase name="reading was accepted" time="0.008" classname="CreateReading"/>
+  <testsuite name="Create Detection" id="23602d08-2ada-4d67-9d71-4576ad6307fb" timestamp="2026-06-09T09:29:08.792Z" tests="2" failures="0" errors="0" time="0.012">
+    <testcase name="create detection returns 202" time="0.012" classname="CreateDetection"/>
+    <testcase name="submission payload is valid" time="0.012" classname="CreateDetection"/>
   </testsuite>
-  <testsuite name="Get Reading By Id" id="9868dbef-f04e-4212-81c5-9853c69fe620" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.005">
-    <testcase name="get reading returns 200" time="0.005" classname="GetReadingById"/>
-    <testcase name="reading payload contains created reading" time="0.005" classname="GetReadingById"/>
+  <testsuite name="Get Detection By Id" id="be868dd4-b70f-4fa0-8b12-adb83360ca52" timestamp="2026-06-09T09:29:08.792Z" tests="2" failures="0" errors="0" time="0.005">
+    <testcase name="get detection returns 200" time="0.005" classname="GetDetectionById"/>
+    <testcase name="detection payload is valid" time="0.005" classname="GetDetectionById"/>
   </testsuite>
-  <testsuite name="Latest Readings" id="a1f556be-d384-40ca-bc7a-4801777520a4" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.004">
-    <testcase name="latest readings returns 200" time="0.004" classname="LatestReadings"/>
-    <testcase name="latest readings include created record" time="0.004" classname="LatestReadings"/>
+  <testsuite name="Get Model Info" id="ba5b9fa5-2c97-4b05-bcac-eb242254ac5d" timestamp="2026-06-09T09:29:08.792Z" tests="2" failures="0" errors="0" time="0.005">
+    <testcase name="model info returns 200" time="0.005" classname="GetModelInfo"/>
+    <testcase name="model info payload is valid" time="0.005" classname="GetModelInfo"/>
   </testsuite>
 </testsuites>

@@ -27,8 +27,11 @@ ENV PATH="/opt/venv/bin:$PATH"
 ENV APP_HOST=0.0.0.0
 ENV APP_PORT=8000
 ENV AUTH_TOKEN=local-dev-token
-ENV SERVICE_NAME=iot-ingestion
-ENV SERVICE_VERSION=0.5.0
+ENV SERVICE_NAME=ai-vision
+ENV SERVICE_VERSION=1.0.0
+ENV AI_SERVICE_URL=http://ai-service:9000
+ENV MODEL_NAME=yolo-hospital-monitor
+ENV MODEL_VERSION=yolov11n-hospital-2.3.1
 
 WORKDIR /app
 

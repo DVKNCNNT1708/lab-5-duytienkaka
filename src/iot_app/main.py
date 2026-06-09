@@ -2,109 +2,211 @@ import os
 from datetime import datetime, timezone
 from enum import Enum
 from http import HTTPStatus
-from typing import Dict, List, Optional
+from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+import requests
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-# Đọc biến môi trường với giá trị mặc định
-SERVICE_NAME = os.getenv("SERVICE_NAME", "iot-ingestion")
-SERVICE_VERSION = os.getenv("SERVICE_VERSION", "0.5.0")
+SERVICE_NAME = os.getenv("SERVICE_NAME", "ai-vision")
+SERVICE_VERSION = os.getenv("SERVICE_VERSION", "1.0.0")
 AUTH_TOKEN = os.getenv("AUTH_TOKEN", "local-dev-token")
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://ai-service:9000")
+MODEL_NAME = os.getenv("MODEL_NAME", "yolo-hospital-monitor")
+MODEL_VERSION = os.getenv("MODEL_VERSION", "yolov11n-hospital-2.3.1")
 
 
 app = FastAPI(
-    title="FIT4110 Lab 05 - IoT Ingestion Service",
+    title="AI Vision Detection API",
     version=SERVICE_VERSION,
     description=(
-        "IoT Ingestion API chạy trong ngữ cảnh Docker Compose cho Lab 05. "
-        "Luồng logic được kế thừa từ Lab 04 và tiếp tục được dùng để kiểm thử end‑to‑end."
+        "Provider API for Pair 01 - Camera Stream -> AI Vision. "
+        "The service accepts image references, stores detection requests, and "
+        "returns mock or backend-assisted detection results."
     ),
 )
 
 
-class SensorMetric(str, Enum):
-    temperature = "temperature"
-    humidity = "humidity"
-    motion = "motion"
-    smoke = "smoke"
+class DetectionStatus(str, Enum):
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
-class SensorUnit(str, Enum):
-    celsius = "celsius"
-    percent = "percent"
-    boolean = "boolean"
-    ppm = "ppm"
+class RiskLevel(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 
-class ProblemDetails(BaseModel):
-    type: str = "about:blank"
+class AlertHint(str, Enum):
+    REVIEW_SECURITY = "REVIEW_SECURITY"
+    MONITOR = "MONITOR"
+    NONE = "NONE"
+
+
+class ObjectType(str, Enum):
+    PERSON = "PERSON"
+    WHEELCHAIR = "WHEELCHAIR"
+    STRETCHER = "STRETCHER"
+    SMOKE = "SMOKE"
+    FIRE_EXTINGUISHER = "FIRE_EXTINGUISHER"
+    UNKNOWN = "UNKNOWN"
+
+
+class ProblemItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    code: str
+    message: str
+
+
+class Problem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: str
     title: str
     status: int = Field(..., ge=400, le=599)
-    detail: str
+    detail: Optional[str] = None
     instance: Optional[str] = None
+    errors: List[ProblemItem] = Field(default_factory=list)
 
 
-class HealthResponse(BaseModel):
-    status: str
+class HealthStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["ok"]
     service: str
-    version: str
+    time: str
 
 
-class SensorReadingCreate(BaseModel):
-    device_id: str = Field(..., min_length=3, examples=["ESP32-LAB-A01"])
-    metric: SensorMetric = Field(..., examples=["temperature"])
-    value: float = Field(
-        ...,
-        ge=-40,
-        le=80,
-        description="Boundary range used in Lab 03 và Lab 04: -40 đến 80.",
-        examples=[31.5],
+class ImageUrlSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sourceType: Literal["IMAGE_URL"]
+    url: str
+
+
+class ObjectStorageSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sourceType: Literal["OBJECT_STORAGE_REF"]
+    bucket: str = Field(..., min_length=3, max_length=100)
+    objectKey: str = Field(..., min_length=3, max_length=300)
+    expiresAt: str
+
+
+ImageSource = Annotated[
+    Union[ImageUrlSource, ObjectStorageSource],
+    Field(discriminator="sourceType"),
+]
+
+
+class DetectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    requestId: str = Field(..., pattern=r"^REQ-[A-Z0-9-]+$")
+    cameraId: str = Field(..., pattern=r"^CAM-[A-Z0-9-]+$")
+    capturedAt: str
+    traceId: str = Field(..., pattern=r"^TRACE-[A-Z0-9-]+$")
+    zoneId: Optional[str] = Field(default=None, min_length=2, max_length=80)
+    motionLevel: Optional[float] = Field(default=None, ge=0, le=1)
+    notes: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    imageSource: ImageSource
+
+
+class BoundingBox(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    x: float = Field(..., ge=0, le=1)
+    y: float = Field(..., ge=0, le=1)
+    width: float = Field(..., ge=0, le=1)
+    height: float = Field(..., ge=0, le=1)
+
+
+class DetectedObject(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    objectType: ObjectType
+    label: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    confidence: float = Field(..., ge=0, le=1)
+    trackId: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    boundingBox: BoundingBox
+
+
+class DetectionSnapshot(BaseModel):
+    status: DetectionStatus
+    confidence: float = Field(..., ge=0, le=1)
+    riskLevel: RiskLevel
+    modelVersion: str = Field(..., min_length=3, max_length=100)
+    summary: Optional[str] = Field(default=None, min_length=3, max_length=300)
+    alertHint: Optional[AlertHint] = None
+    completedAt: Optional[str] = None
+    thumbnailUrl: Optional[str] = None
+    objects: List[DetectedObject] = Field(default_factory=list, min_length=0, max_length=50)
+
+
+class DetectionSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detectionId: str = Field(..., pattern=r"^DET-[0-9]{8}-[0-9]{4}$")
+    requestId: str = Field(..., pattern=r"^REQ-[A-Z0-9-]+$")
+    traceId: str = Field(..., pattern=r"^TRACE-[A-Z0-9-]+$")
+    status: DetectionStatus
+    acceptedAt: str
+    preliminaryResult: Optional[DetectionSnapshot] = None
+
+
+class DetectionResult(DetectionSnapshot):
+    detectionId: str = Field(..., pattern=r"^DET-[0-9]{8}-[0-9]{4}$")
+    requestId: str = Field(..., pattern=r"^REQ-[A-Z0-9-]+$")
+    traceId: str = Field(..., pattern=r"^TRACE-[A-Z0-9-]+$")
+    processedAt: str
+
+
+class ModelInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    modelName: str = Field(..., min_length=3, max_length=100)
+    modelVersion: str = Field(..., min_length=3, max_length=100)
+    supportedObjectTypes: List[ObjectType] = Field(..., min_length=1, max_length=20)
+    supportedImageSourceTypes: List[Literal["IMAGE_URL", "OBJECT_STORAGE_REF"]] = Field(
+        ..., min_length=1, max_length=5
     )
-    unit: Optional[SensorUnit] = Field(default=None, examples=["celsius"])
-    timestamp: str = Field(..., examples=["2026-05-13T08:30:00+07:00"])
+    maxImageSizeBytes: int = Field(..., ge=1024, le=104857600)
+    notes: Optional[str] = Field(default=None, min_length=3, max_length=300)
+    lastUpdatedAt: Optional[str] = None
 
 
-class SensorReading(BaseModel):
-    reading_id: str
-    device_id: str
-    metric: SensorMetric
-    value: float
-    unit: Optional[SensorUnit] = None
-    timestamp: str
-    created_at: str
+DETECTIONS: Dict[str, DetectionResult] = {}
+REQUEST_INDEX: Dict[str, str] = {}
 
 
-class SensorReadingCreated(BaseModel):
-    reading_id: str
-    device_id: str
-    metric: SensorMetric
-    accepted: bool
-    created_at: str
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-READINGS: List[Dict] = []
-
-
-def build_problem(
+def problem_response(
     *,
     status_code: int,
     title: str,
-    detail: str,
-    instance: Optional[str] = None,
-    problem_type: str = "about:blank",
+    detail: Optional[str],
+    request: Optional[Request] = None,
+    problem_type: str,
+    errors: Optional[List[ProblemItem]] = None,
 ) -> Dict:
-    problem = {
+    return {
         "type": problem_type,
         "title": title,
         "status": status_code,
         "detail": detail,
+        "instance": str(request.url) if request else None,
+        "errors": [item.model_dump() for item in (errors or [])],
     }
-    if instance:
-        problem["instance"] = instance
-    return problem
 
 
 @app.exception_handler(HTTPException)
@@ -112,18 +214,20 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     if isinstance(exc.detail, dict):
         problem = exc.detail
     else:
-        problem = build_problem(
+        problem = problem_response(
             status_code=exc.status_code,
             title=HTTPStatus(exc.status_code).phrase,
             detail=str(exc.detail),
-            instance=str(request.url.path),
+            request=request,
+            problem_type="https://hospital-campus.local/errors/request-failed",
         )
 
     problem.setdefault("status", exc.status_code)
     problem.setdefault("title", HTTPStatus(exc.status_code).phrase)
-    problem.setdefault("type", "about:blank")
+    problem.setdefault("type", "https://hospital-campus.local/errors/request-failed")
     problem.setdefault("detail", "Request failed")
-    problem.setdefault("instance", str(request.url.path))
+    problem.setdefault("instance", str(request.url))
+    problem.setdefault("errors", [])
 
     return JSONResponse(
         status_code=exc.status_code,
@@ -137,132 +241,202 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    first_error = exc.errors()[0] if exc.errors() else {}
-    location = ".".join(str(item) for item in first_error.get("loc", []))
-    message = first_error.get("msg", "Request validation error")
-    detail = f"{location}: {message}" if location else message
+    errors: List[ProblemItem] = []
+    for item in exc.errors():
+        location = ".".join(str(part) for part in item.get("loc", []))
+        errors.append(
+            ProblemItem(
+                field=location or "body",
+                code=str(item.get("type", "VALIDATION_ERROR")).upper(),
+                message=item.get("msg", "Request validation error"),
+            )
+        )
 
+    detail = errors[0].message if errors else "Request validation error"
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=build_problem(
+        content=problem_response(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            title="Validation error",
+            title="Unsupported camera registration",
             detail=detail,
-            instance=str(request.url.path),
-            problem_type="https://smart-campus.local/problems/validation-error",
+            request=request,
+            problem_type="https://hospital-campus.local/errors/unprocessable",
+            errors=errors,
         ),
         media_type="application/problem+json",
     )
 
 
 def verify_bearer_token(authorization: Optional[str] = Header(default=None)) -> None:
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=build_problem(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                title="Unauthorized",
-                detail="Missing Authorization header",
-                problem_type="https://smart-campus.local/problems/unauthorized",
-            ),
-        )
-
     expected = f"Bearer {AUTH_TOKEN}"
     if authorization != expected:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=build_problem(
+            detail=problem_response(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                title="Unauthorized",
-                detail="Invalid bearer token",
-                problem_type="https://smart-campus.local/problems/unauthorized",
+                title="Authentication required",
+                detail="Bearer token is missing or invalid",
+                problem_type="https://hospital-campus.local/errors/unauthorized",
             ),
         )
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def next_reading_id() -> str:
+def next_detection_id() -> str:
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
-    return f"R-{today}-{len(READINGS) + 1:04d}"
+    return f"DET-{today}-{len(DETECTIONS) + 1:04d}"
 
 
-@app.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse(
-        status="ok",
-        service=SERVICE_NAME,
-        version=SERVICE_VERSION,
-    )
+def backend_prediction(payload: DetectionRequest) -> Dict:
+    default_prediction = {
+        "confidence": 0.98,
+        "riskLevel": "HIGH",
+        "summary": f"Person detected near {payload.zoneId or payload.cameraId}",
+        "alertHint": "REVIEW_SECURITY",
+        "thumbnailUrl": f"https://media.hospital.local/thumbnails/{payload.requestId}.jpg",
+        "objects": [
+            {
+                "objectType": "PERSON",
+                "label": "human",
+                "confidence": 0.99,
+                "trackId": "TRACK-77",
+                "boundingBox": {"x": 0.12, "y": 0.08, "width": 0.41, "height": 0.82},
+            }
+        ],
+    }
+
+    try:
+        response = requests.post(
+            f"{AI_SERVICE_URL.rstrip('/')}/predict",
+            json=payload.model_dump(mode="json"),
+            timeout=3,
+        )
+        if response.ok:
+            data = response.json()
+            for key in default_prediction:
+                data.setdefault(key, default_prediction[key])
+            return data
+    except requests.RequestException:
+        pass
+
+    return default_prediction
+
+
+@app.get("/health", response_model=HealthStatus)
+def health() -> HealthStatus:
+    return HealthStatus(status="ok", service=SERVICE_NAME, time=now_iso())
 
 
 @app.post(
-    "/readings",
-    response_model=SensorReadingCreated,
-    status_code=status.HTTP_201_CREATED,
+    "/vision/detect",
+    response_model=DetectionSubmission,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(verify_bearer_token)],
     responses={
-        401: {"model": ProblemDetails},
-        422: {"model": ProblemDetails},
-        429: {"model": ProblemDetails},
+        400: {"model": Problem},
+        401: {"model": Problem},
+        403: {"model": Problem},
+        409: {"model": Problem},
+        413: {"model": Problem},
+        422: {"model": Problem},
+        503: {"model": Problem},
     },
 )
-def create_reading(payload: SensorReadingCreate, response: Response) -> SensorReadingCreated:
-    # Ví dụ logic cảnh báo: nếu nhiệt độ >= 70 thì thêm header cảnh báo
-    if payload.metric == SensorMetric.temperature and payload.value >= 70:
-        response.headers["X-Warning"] = "high-temperature"
+def create_detection(
+    payload: DetectionRequest,
+    request: Request,
+    x_correlation_id: Optional[str] = Header(default=None, alias="X-Correlation-Id"),
+) -> DetectionSubmission:
+    if payload.requestId in REQUEST_INDEX:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=problem_response(
+                status_code=status.HTTP_409_CONFLICT,
+                title="Duplicate request",
+                detail=f"requestId {payload.requestId} already exists",
+                request=request,
+                problem_type="https://hospital-campus.local/errors/conflict",
+            ),
+        )
 
-    reading_id = next_reading_id()
-    created_at = now_iso()
+    accepted_at = now_iso()
+    detection_id = next_detection_id()
+    prediction = backend_prediction(payload)
+    processed_at = now_iso()
 
-    item = {
-        "reading_id": reading_id,
-        "device_id": payload.device_id,
-        "metric": payload.metric.value,
-        "value": payload.value,
-        "unit": payload.unit.value if payload.unit else None,
-        "timestamp": payload.timestamp,
-        "created_at": created_at,
-    }
-    READINGS.append(item)
+    result = DetectionResult(
+        detectionId=detection_id,
+        requestId=payload.requestId,
+        traceId=payload.traceId,
+        status=DetectionStatus.COMPLETED,
+        confidence=prediction["confidence"],
+        riskLevel=prediction["riskLevel"],
+        modelVersion=MODEL_VERSION,
+        summary=prediction.get("summary"),
+        alertHint=prediction.get("alertHint"),
+        processedAt=processed_at,
+        completedAt=processed_at,
+        thumbnailUrl=prediction.get("thumbnailUrl"),
+        objects=[DetectedObject(**item) for item in prediction.get("objects", [])],
+    )
+    DETECTIONS[detection_id] = result
+    REQUEST_INDEX[payload.requestId] = detection_id
 
-    return SensorReadingCreated(
-        reading_id=reading_id,
-        device_id=payload.device_id,
-        metric=payload.metric,
-        accepted=True,
-        created_at=created_at,
+    return DetectionSubmission(
+        detectionId=detection_id,
+        requestId=payload.requestId,
+        traceId=payload.traceId,
+        status=DetectionStatus.PROCESSING,
+        acceptedAt=accepted_at,
+        preliminaryResult=None,
     )
 
 
-@app.get("/readings/latest", dependencies=[Depends(verify_bearer_token)])
-def latest_readings(
-    device_id: Optional[str] = Query(default=None),
-    limit: int = Query(default=10, ge=1, le=100),
-) -> Dict[str, List[Dict]]:
-    items = READINGS
-
-    if device_id:
-        items = [item for item in items if item["device_id"] == device_id]
-
-    return {"items": items[-limit:]}
-
-
-@app.get("/readings/{reading_id}", dependencies=[Depends(verify_bearer_token)])
-def get_reading(reading_id: str) -> Dict:
-    for item in READINGS:
-        if item["reading_id"] == reading_id:
-            return item
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=build_problem(
+@app.get(
+    "/vision/detections/{detectionId}",
+    response_model=DetectionResult,
+    dependencies=[Depends(verify_bearer_token)],
+    responses={401: {"model": Problem}, 403: {"model": Problem}, 404: {"model": Problem}, 503: {"model": Problem}},
+)
+def get_detection_by_id(
+    request: Request,
+    detectionId: str = Path(..., pattern=r"^DET-[0-9]{8}-[0-9]{4}$"),
+    x_correlation_id: Optional[str] = Header(default=None, alias="X-Correlation-Id"),
+) -> DetectionResult:
+    result = DETECTIONS.get(detectionId)
+    if result is None:
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            title="Not Found",
-            detail=f"Reading {reading_id} does not exist",
-            instance=f"/readings/{reading_id}",
-            problem_type="https://smart-campus.local/problems/not-found",
-        ),
+            detail=problem_response(
+                status_code=status.HTTP_404_NOT_FOUND,
+                title="Detection not found",
+                detail=f"detectionId {detectionId} does not exist",
+                request=request,
+                problem_type="https://hospital-campus.local/errors/not-found",
+            ),
+        )
+    return result
+
+
+@app.get(
+    "/vision/models/info",
+    response_model=ModelInfo,
+    dependencies=[Depends(verify_bearer_token)],
+    responses={401: {"model": Problem}, 403: {"model": Problem}, 503: {"model": Problem}},
+)
+def get_model_info(
+    x_correlation_id: Optional[str] = Header(default=None, alias="X-Correlation-Id"),
+) -> ModelInfo:
+    return ModelInfo(
+        modelName=MODEL_NAME,
+        modelVersion=MODEL_VERSION,
+        supportedObjectTypes=[
+            ObjectType.PERSON,
+            ObjectType.WHEELCHAIR,
+            ObjectType.STRETCHER,
+            ObjectType.SMOKE,
+        ],
+        supportedImageSourceTypes=["IMAGE_URL", "OBJECT_STORAGE_REF"],
+        maxImageSizeBytes=5242880,
+        notes="Tuned for indoor hospital corridor and entrance cameras",
+        lastUpdatedAt="2026-05-01T00:00:00Z",
     )
