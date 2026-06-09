@@ -1,0 +1,191 @@
+{
+  "info": {
+    "_postman_id": "8d8995a8-6f4d-4c52-9c64-c21feae99637",
+    "name": "FIT4110 Lab05 IoT Compose",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "End-to-end checks for the Lab 05 Docker Compose stack."
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('health returns 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.test('health payload is valid', function () {",
+              "  pm.expect(body.status).to.eql('ok');",
+              "  pm.expect(body.service).to.eql('iot-ingestion');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create Reading",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"device_id\": \"ESP32-LAB-A01\",\n  \"metric\": \"temperature\",\n  \"value\": 31.5,\n  \"unit\": \"celsius\",\n  \"timestamp\": \"2026-06-09T10:00:00+07:00\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/readings",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "readings"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('create reading returns 201', function () {",
+              "  pm.response.to.have.status(201);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('readingId', body.reading_id);",
+              "pm.test('reading was accepted', function () {",
+              "  pm.expect(body.accepted).to.eql(true);",
+              "  pm.expect(body.device_id).to.eql('ESP32-LAB-A01');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Reading By Id",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/readings/{{readingId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "readings",
+            "{{readingId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('get reading returns 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.test('reading payload contains created reading', function () {",
+              "  pm.expect(body.reading_id).to.eql(pm.collectionVariables.get('readingId'));",
+              "  pm.expect(body.device_id).to.eql('ESP32-LAB-A01');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Latest Readings",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/readings/latest?device_id=ESP32-LAB-A01&limit=5",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "readings",
+            "latest"
+          ],
+          "query": [
+            {
+              "key": "device_id",
+              "value": "ESP32-LAB-A01"
+            },
+            {
+              "key": "limit",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('latest readings returns 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.test('latest readings include created record', function () {",
+              "  pm.expect(body.items).to.be.an('array');",
+              "  pm.expect(body.items.length).to.be.greaterThan(0);",
+              "  pm.expect(body.items.some(function (item) {",
+              "    return item.reading_id === pm.collectionVariables.get('readingId');",
+              "  })).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "readingId",
+      "value": ""
+    }
+  ]
+}

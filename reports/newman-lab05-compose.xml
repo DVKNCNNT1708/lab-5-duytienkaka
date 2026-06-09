@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="FIT4110 Lab05 IoT Compose" tests="4" time="0.054">
+  <testsuite name="Health" id="6daff0de-d036-4aac-a797-550a82280398" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.037">
+    <testcase name="health returns 200" time="0.037" classname="Health"/>
+    <testcase name="health payload is valid" time="0.037" classname="Health"/>
+  </testsuite>
+  <testsuite name="Create Reading" id="0042bde3-7a7f-4c6c-aa04-15fb7e0656ea" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.008">
+    <testcase name="create reading returns 201" time="0.008" classname="CreateReading"/>
+    <testcase name="reading was accepted" time="0.008" classname="CreateReading"/>
+  </testsuite>
+  <testsuite name="Get Reading By Id" id="9868dbef-f04e-4212-81c5-9853c69fe620" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.005">
+    <testcase name="get reading returns 200" time="0.005" classname="GetReadingById"/>
+    <testcase name="reading payload contains created reading" time="0.005" classname="GetReadingById"/>
+  </testsuite>
+  <testsuite name="Latest Readings" id="a1f556be-d384-40ca-bc7a-4801777520a4" timestamp="2026-06-09T09:13:12.377Z" tests="2" failures="0" errors="0" time="0.004">
+    <testcase name="latest readings returns 200" time="0.004" classname="LatestReadings"/>
+    <testcase name="latest readings include created record" time="0.004" classname="LatestReadings"/>
+  </testsuite>
+</testsuites>

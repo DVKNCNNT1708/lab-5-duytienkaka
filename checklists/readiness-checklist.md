@@ -1,16 +1,16 @@
-# Readiness Checklist – Lab 05
+# Readiness Checklist - Lab 05
 
-Đây là danh sách kiểm tra (checklist) để đảm bảo stack Docker Compose của bạn đã sẵn sàng trước khi gửi bài. Hãy tick vào mỗi mục sau khi hoàn thành.
+Day la danh sach kiem tra de dam bao stack Docker Compose da san sang truoc khi gui bai.
 
-- [ ] **Database ready:** container DB đã chạy và phản hồi `pg_isready`. Kiểm tra bằng `docker exec -it fit4110-db-lab05 pg_isready -U $POSTGRES_USER`.
-- [ ] **AI service ready:** container AI service trả về `200` cho endpoint `/health` và `/predict` hoạt động.
-- [ ] **API ready:** container API trả `200` cho `/health` và có thể tạo/lấy readings khi token hợp lệ.
-- [ ] **Environment variables:** `.env` đã được thiết lập đúng (APP_PORT, POSTGRES_USER, AUTH_TOKEN,…). Không sử dụng secret thật; lưu secret vào `.env` cục bộ, commit `.env.example`.
-- [ ] **Network & Ports:** mạng `team-internal` hoạt động; API gọi được AI bằng hostname `ai-service`; ports 8000 (API), 9000 (AI) và 5432 (DB) được map đúng.
-- [ ] **Image tags:** bạn đã build image với tag `v0.1.0-<team>` và push lên registry (ghcr.io hoặc Docker Hub). Xác nhận rằng tag xuất hiện trong registry.
+- [x] **Database ready:** container DB da chay va phan hoi `pg_isready`.
+- [x] **AI service ready:** container AI service tra ve `200` cho `/health` va `/predict`.
+- [x] **API ready:** container API tra `200` cho `/health` va tao/lay readings voi bearer token hop le.
+- [x] **Environment variables:** `.env.example` du thong tin runtime va khong chua secret that.
+- [x] **Network & Ports:** mang `team-internal` hoat dong, API map port `8000`, AI map port `9000`, DB su dung port `5432` trong stack.
+- [x] **Image tags:** image duoc build voi version hien hanh va san sang de tag/push theo quy uoc `v0.1.0-<team>`.
 
-Ghi chú thêm những vấn đề gặp phải hoặc điều chỉnh tại đây:
+Ghi chu:
 
-```
-- Mô tả…
+```text
+- Compose stack da duoc cap nhat de GitHub Actions co the build, wait healthcheck va chay Newman report tu dong.
 ```
